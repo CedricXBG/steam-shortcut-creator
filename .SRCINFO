@@ -1,0 +1,17 @@
+pkgbase = steam-shortcut-creator
+	pkgdesc = A lightweight GTK3/x86_64 Assembly utility to generate Steam .desktop shortcuts.
+	pkgver = 1.0.0
+	pkgrel = 1
+	url = https://github.com/CedricXBG/steam-shortcut-creator
+	arch = x86_64
+	license = MIT
+	makedepends = nasm
+	makedepends = binutils
+	makedepends = make
+	makedepends = git
+	depends = gtk3
+	depends = curl
+	source = git+https://github.com/CedricXBG/steam-shortcut-creator.git
+	sha256sums = SKIP
+
+pkgname = steam-shortcut-creator
