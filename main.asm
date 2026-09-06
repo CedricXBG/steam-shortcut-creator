@@ -7,7 +7,8 @@ extern snprintf, curl_easy_init, curl_easy_setopt, curl_easy_perform, curl_easy_
 extern fopen, fread, fclose, readlink, chmod, fwrite
 extern gtk_message_dialog_new, gtk_dialog_run, gtk_widget_destroy, gtk_grid_set_row_spacing, gtk_grid_set_column_spacing
 extern gtk_image_new_from_icon_name, gtk_entry_set_placeholder_text, gtk_settings_get_default, gtk_image_new_from_file
-extern gtk_message_dialog_set_image, gtk_widget_show
+extern gtk_message_dialog_set_image, gtk_widget_show, gtk_widget_get_style_context, gtk_style_context_add_class
+extern gtk_css_provider_new, gtk_css_provider_load_from_data, gdk_screen_get_default, gtk_style_context_add_provider_for_screen
 
 section .data
 	title: db "Steam Shortcut Creator", 0
@@ -42,6 +43,14 @@ section .data
 	steam_icon_name: db "steam", 0
 
 	icon_replace: db "steam_icon_%s", 0
+	
+	class_dialog_win: db "dialog-win", 0
+	class_main_win: db "main-window", 0
+	css_style: 	db "window.main-window { background-color: #1e1e2e; } ", 10
+			db "window.main-window entry { border-radius: 8px; padding: 6px; background-color: #313244; color: #cdd6f4; border: 1px solid #45475a; } ", 10
+			db "window.main-window entry:focus { border-color: #cba6f7; } ", 10
+			db "window.main-window button { background-color: #89b4fa; color: #11111b; font-weight: bold; border-radius: 8px; padding: 8px; } ", 10
+			db "window.main-window button:hover { background-color: #b4befe; } ", 0
 
 section .bss
 	url_buffer: resb 512
@@ -70,11 +79,20 @@ _start:
 	xor esi, esi
 	call gtk_init
 
+	call apply_css
+
 	xor edi, edi
 	call gtk_window_new
 	mov r13, rax ; R13 = window
 
 	mov [rel main_window], r13
+	
+	; add main-window class
+	mov rdi, r13 ; main window
+	call gtk_widget_get_style_context ; fetch GtkStyleContext of window
+	mov rdi, rax 			; 1st arg : style context
+	lea rsi, [rel class_main_win] 	; 2nd arg : "main-window"
+	call gtk_style_context_add_class ; add class
 
 	mov rdi, r13
 	mov esi, dword [rel window_width]
@@ -442,5 +460,35 @@ show_confirmation:
 	
 	pop r13
 	pop rbx
+	pop rbp
+	ret
+
+apply_css:
+	push rbp
+	mov rbp, rsp
+	push r12
+	push rbx
+
+	call gtk_css_provider_new
+	mov rbx, rax ; RBX = GtkCssProvider pointer
+
+	; load css from memory
+	mov rdi, rbx
+	lea rsi, [rel css_style]
+	mov rdx, -1 ; lenght = -1 (to read until null byte)
+	xor ecx, ecx ; error = NULL
+	call gtk_css_provider_load_from_data
+
+	; fetch default screen
+	call gdk_screen_get_default ; now RAX = GdkScreen pointer
+
+	; apply provider to screen
+	mov rdi, rax ; screen
+	mov rsi, rbx ; provider
+	mov edx, 800 ; priority (800)
+	call gtk_style_context_add_provider_for_screen
+
+	pop rbx
+	pop r12
 	pop rbp
 	ret
