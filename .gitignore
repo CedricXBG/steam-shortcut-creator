@@ -1,0 +1,13 @@
+# /build/*
+build/
+
+# IDEs and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# temporary packages
+/pkg/
+/src/
+*.pkg.tar.*
