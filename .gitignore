@@ -1,13 +1,18 @@
-# /build/*
+# Build files and final binary
 build/
+*.o
+steam-shortcut-creator
+
+# Temporary packaging files (makepkg / AUR)
+pkg/
+src/
+*.pkg.tar.*
+*.log
 
 # IDEs and editor files
+.DS_store
+*~
 .vscode/
 .idea/
 *.swp
 *.swo
-
-# temporary packages
-/pkg/
-/src/
-*.pkg.tar.*
