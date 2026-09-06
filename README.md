@@ -33,6 +33,7 @@ git clone git@github.com:CedricXBG/steam-shortcut-creator.git
 cd steam-shortcut-creator
 
 # Build the project
+make
 
 # Clean build artifacts
 make clean
