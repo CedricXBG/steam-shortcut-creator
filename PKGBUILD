@@ -1,6 +1,6 @@
 # Maintainer: CedricXBG cedricxbg@icloud.com
 pkgname=steam-shortcut-creator
-pkgver=1.0.0
+pkgver=1.1.0
 pkgrel=1
 pkgdesc="A lightweight GTK3/x86_64 Assembly utility to generate Steam .desktop shortcuts."
 arch=('x86_64')

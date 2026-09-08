@@ -9,6 +9,7 @@ extern gtk_message_dialog_new, gtk_dialog_run, gtk_widget_destroy, gtk_grid_set_
 extern gtk_image_new_from_icon_name, gtk_entry_set_placeholder_text, gtk_settings_get_default, gtk_image_new_from_file
 extern gtk_message_dialog_set_image, gtk_widget_show, gtk_widget_get_style_context, gtk_style_context_add_class
 extern gtk_css_provider_new, gtk_css_provider_load_from_data, gdk_screen_get_default, gtk_style_context_add_provider_for_screen
+extern getenv, getuid, getpwuid
 
 section .data
 	title: db "Steam Shortcut Creator", 0
@@ -23,6 +24,14 @@ section .data
 
 	self_exe: db "/proc/self/exe", 0
 	desktop_fmt: db "%s/%s.desktop", 0
+	
+	fallback: db "/Desktop", 0
+	env_var_home: db "HOME", 0
+	mode_r: db "r", 0
+	userdirs_fmt: db "%s/.config/user-dirs.dirs", 0
+	xdg_desktop_key: db "XDG_DESKTOP_DIR=", 0x22, 0
+	xdg_desktop_key_len equ $ - xdg_desktop_key - 1 ; no null byte in len
+
 	window_width: dd 400
 	window_height: dd 250
 
@@ -57,6 +66,7 @@ section .bss
 	response_buf: resb 65536 ; buffer for json res
 	write_ptr: resq 1 ; pointer for libcurl
 	game_name: resb 256 ; buffer for game name
+	path_buf: resb 512 ; temp buf
 	out_buf: resb 4096 ; final result
 	appid_ptr: resq 1; appid pointer
 	exe_path: resb 512
@@ -65,6 +75,10 @@ section .bss
 	confirmation_msg: resb 320
 	main_window: resq 1
 	icon_replace_buf: resb 128
+
+	home_dir: resb 256
+	userdirs_path: resb 300
+	userdirs_content: resb 4096
 
 section .text
 _start:
@@ -373,11 +387,15 @@ apply_template:
 	cmp byte [rsi], '/'
 	jne .find_last_slash
 	mov byte [rsi], 0
+	
+	call get_desktop_dir
+	test rax, rax
+	jz .err_template
 
 	lea rdi, [rel desktop_path]
 	mov rsi, 512
 	lea rdx, [rel desktop_fmt]
-	lea rcx, [rel exe_path]
+	mov rcx, rax
 	lea r8, [rel game_name]
 	xor eax, eax
 	call snprintf
@@ -491,4 +509,148 @@ apply_css:
 	pop rbx
 	pop r12
 	pop rbp
+	ret
+
+
+get_desktop_dir:
+	push rbp
+	mov rbp, rsp
+	push rbx
+	push r12
+	push r13
+	sub rsp, 8
+
+	; resolve home dir
+	lea rdi, [rel env_var_home]
+	call getenv
+	test rax, rax
+	jz .use_getpwuid_home
+
+	lea rdi, [rel home_dir]
+	mov rsi, rax
+	call .strcpy
+	jmp .home_resolved
+
+.use_getpwuid_home:
+	call getuid
+	mov rdi, rax
+	call getpwuid
+	test rax, rax
+	jz .gdd_error ; can't resolve home dir : give up
+
+	mov rsi, [rax + 0x20] ; pw_dir
+	lea rdi, [rel home_dir]
+	call .strcpy
+
+.home_resolved:
+	; build path to user-dirs.dirs
+	lea rdi, [rel userdirs_path]
+	mov rsi, 300
+	lea rdx, [rel userdirs_fmt]
+	lea rcx, [rel home_dir]
+	xor eax, eax
+	call snprintf
+
+	; open and read file
+	lea rdi, [rel userdirs_path]
+	lea rsi, [rel mode_r]
+	call fopen
+	test rax, rax
+	jz .use_fallback
+	mov r12, rax ; FILE*
+
+	lea rdi, [rel userdirs_content]
+	mov rsi, 1
+	mov rdx, 4095
+	mov rcx, r12
+	call fread
+
+	lea rdx, [rel userdirs_content]
+	mov byte [rdx + rax], 0 ; number of byte in rax + addr in userdirs_content -> we put null byte after all that
+
+	mov rdi, r12
+	call fclose
+
+	; search XDG_DESKTOP_DIR="
+	lea rdi, [rel userdirs_content]
+	lea rsi, [rel xdg_desktop_key]
+	call strstr
+	test rax, rax
+	jz .use_fallback ; no key -> use fallback
+
+	add rax, xdg_desktop_key_len
+	mov r13, rax ; r13 : start of the value (after the XDG_DESKTOP_DIR=")
+
+	cmp byte [r13], '$'
+	je .home_relative
+	jmp .absolute_path
+
+.home_relative:
+	add r13, 5 ; skip $HOME
+	lea rdi, [rel path_buf]
+	lea rsi, [rel home_dir]
+	call .strcpy ; rdi is now pointing on null byte of path_buf
+	mov rsi, r13
+	call .copy_until_quote
+	lea rax, [rel path_buf]
+	jmp .gdd_done
+
+.absolute_path:
+	lea rdi, [rel path_buf]
+	mov rsi, r13
+	call .copy_until_quote
+	lea rax, [rel path_buf]
+	jmp .gdd_done
+
+.use_fallback:
+	lea rdi, [rel path_buf]
+	lea rsi, [rel home_dir]
+	call .strcpy
+	lea rsi, [rel fallback] ; "/Desktop", only if everything is null
+	call .strcat
+	lea rax, [rel path_buf]
+	jmp .gdd_done
+
+.gdd_error:
+	xor rax, rax
+
+.gdd_done:
+	add rsp, 8
+	pop r13
+	pop r12
+	pop rbx
+	leave
+	ret
+
+.strcpy:
+	mov al, [rsi]
+	mov [rdi], al
+	inc rsi
+	inc rdi
+	test al, al
+	jnz .strcpy
+	dec rdi
+	ret
+
+.strcat:
+	mov al, [rsi]
+	mov [rdi], al
+	inc rsi
+	inc rdi
+	test al, al
+	jnz .strcat
+	ret
+
+.copy_until_quote:
+	mov al, [rsi]
+	test al, al
+	jz .cuq_end
+	cmp al, '"'
+	je .cuq_end
+	mov [rdi], al
+	inc rsi
+	inc rdi
+	jmp .copy_until_quote
+.cuq_end:
+	mov byte [rdi], 0
 	ret
