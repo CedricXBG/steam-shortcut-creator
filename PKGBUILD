@@ -1,6 +1,6 @@
 # Maintainer: CedricXBG cedricxbg@icloud.com
 pkgname=steam-shortcut-creator
-pkgver=1.1.0
+pkgver=r0.g0000000
 pkgrel=1
 pkgdesc="A lightweight GTK3/x86_64 Assembly utility to generate Steam .desktop shortcuts."
 arch=('x86_64')
@@ -10,6 +10,11 @@ depends=('gtk3' 'curl')
 makedepends=('nasm' 'binutils' 'make' 'git')
 source=("git+https://github.com/CedricXBG/steam-shortcut-creator.git")
 sha256sums=('SKIP')
+
+pkgver() {
+	cd "${srcdir}${_pkgname}"
+	printf "r%s.%s" "$(git rev-list --count HEAD)" "$(git rev-parse --short HEAD)"	
+}
 
 build() {
 	cd "$pkgname"
